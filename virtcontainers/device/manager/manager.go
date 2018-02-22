@@ -47,7 +47,8 @@ var (
 )
 
 type deviceManager struct {
-	blockDriver string
+	blockDriver           string
+	vhostUserStoreEnabled bool
 
 	devices map[string]api.Device
 	sync.RWMutex
@@ -58,9 +59,10 @@ func deviceLogger() *logrus.Entry {
 }
 
 // NewDeviceManager creates a deviceManager object behaved as api.DeviceManager
-func NewDeviceManager(blockDriver string, devices []api.Device) api.DeviceManager {
+func NewDeviceManager(blockDriver string, vhostUserStoreEnabled bool, devices []api.Device) api.DeviceManager {
 	dm := &deviceManager{
-		devices: make(map[string]api.Device),
+		vhostUserStoreEnabled: vhostUserStoreEnabled,
+		devices:               make(map[string]api.Device),
 	}
 	if blockDriver == VirtioMmio {
 		dm.blockDriver = VirtioMmio
@@ -92,7 +94,7 @@ func (dm *deviceManager) findDeviceByMajorMinor(major, minor int64) api.Device {
 
 // createDevice creates one device based on DeviceInfo
 func (dm *deviceManager) createDevice(devInfo config.DeviceInfo) (dev api.Device, err error) {
-	path, err := config.GetHostPathFunc(devInfo)
+	path, err := config.GetHostPathFunc(devInfo, dm.vhostUserStoreEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +117,8 @@ func (dm *deviceManager) createDevice(devInfo config.DeviceInfo) (dev api.Device
 	}
 	if isVFIO(path) {
 		return drivers.NewVFIODevice(&devInfo), nil
+	} else if isVhostUserDev(devInfo) {
+		return drivers.NewVhostUserBlkDevice(&devInfo), nil
 	} else if isBlock(devInfo) {
 		if devInfo.DriverOptions == nil {
 			devInfo.DriverOptions = make(map[string]string)

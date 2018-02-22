@@ -66,6 +66,11 @@ const (
 	VirtioFS = "virtio-fs"
 )
 
+const (
+	VhostUserBlkMajor  = 241
+	VhostUserSCSIMajor = 242
+)
+
 // Defining these as a variable instead of a const, to allow
 // overriding this in the tests.
 
@@ -74,6 +79,12 @@ var SysDevPrefix = "/sys/dev"
 
 // SysIOMMUPath is static string of /sys/kernel/iommu_groups
 var SysIOMMUPath = "/sys/kernel/iommu_groups"
+
+// VhostUserSockDir is static string
+var VhostUserSockDir = "/var/run/kata-containers/vhost-user-socket"
+
+// VhostUserSockDir is static string
+var VhostUserMknodDir = "/var/run/kata-containers/vhost-user-mknod"
 
 // DeviceInfo is an embedded type that contains device data common to all types of devices.
 type DeviceInfo struct {
@@ -205,6 +216,15 @@ type VhostUserDeviceAttrs struct {
 	Tag       string
 	CacheSize uint32
 	Cache     string
+
+	// PCIAddr is the PCI address used to identify the slot at which the drive is attached.
+	// It is only meaningful for vhoust user block devices
+	PCIAddr string
+
+	// SCSI Address of the block device, in case the device is attached using SCSI driver
+	// SCSI address is in the format SCSI-Id:LUN
+	// It is only meaningful for vhoust user SCSI devices
+	SCSIAddr string
 }
 
 // GetHostPathFunc is function pointer used to mock GetHostPath in tests.
@@ -213,9 +233,18 @@ var GetHostPathFunc = GetHostPath
 // GetHostPath is used to fetch the host path for the device.
 // The path passed in the spec refers to the path that should appear inside the container.
 // We need to find the actual device path on the host based on the major-minor numbers of the device.
-func GetHostPath(devInfo DeviceInfo) (string, error) {
+func GetHostPath(devInfo DeviceInfo, vhostUserStoreEnabled bool) (string, error) {
 	if devInfo.ContainerPath == "" {
 		return "", fmt.Errorf("Empty path provided for device")
+	}
+
+	sysDevPrefix := SysDevPrefix
+	devDirPrefix := "/dev"
+
+	// Filter out vhost-user storage devices by device Major numbers.
+	if vhostUserStoreEnabled && (devInfo.Major == VhostUserSCSIMajor || devInfo.Major == VhostUserBlkMajor) {
+		sysDevPrefix = VhostUserMknodDir
+		devDirPrefix = VhostUserSockDir
 	}
 
 	var pathComp string
@@ -232,7 +261,9 @@ func GetHostPath(devInfo DeviceInfo) (string, error) {
 	}
 
 	format := strconv.FormatInt(devInfo.Major, 10) + ":" + strconv.FormatInt(devInfo.Minor, 10)
-	sysDevPath := filepath.Join(SysDevPrefix, pathComp, format, "uevent")
+	sysDevPath := filepath.Join(sysDevPrefix, pathComp, format, "uevent")
+
+	fmt.Errorf("sysdevpath %s", sysDevPath)
 
 	if _, err := os.Stat(sysDevPath); err != nil {
 		// Some devices(eg. /dev/fuse, /dev/cuse) do not always implement sysfs interface under /sys/dev
@@ -258,5 +289,5 @@ func GetHostPath(devInfo DeviceInfo) (string, error) {
 		return "", err
 	}
 
-	return filepath.Join("/dev", devName.String()), nil
+	return filepath.Join(devDirPrefix, devName.String()), nil
 }

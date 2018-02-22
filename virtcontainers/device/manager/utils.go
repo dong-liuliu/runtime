@@ -35,3 +35,13 @@ func isVFIO(hostPath string) bool {
 func isBlock(devInfo config.DeviceInfo) bool {
 	return devInfo.DevType == "b"
 }
+
+// isVhostUserBlk checks if the device is a VhostUserBlk device.
+func isVhostUserBlk(devInfo config.DeviceInfo) bool {
+	return devInfo.Major == config.VhostUserBlkMajor
+}
+
+// isVhostUserSCSI checks if the device is a VhostUserSCSI device.
+func isVhostUserSCSI(devInfo config.DeviceInfo) bool {
+	return devInfo.Major == config.VhostUserSCSIMajor
+}
