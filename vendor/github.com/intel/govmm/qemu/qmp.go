@@ -946,6 +946,23 @@ func (q *QMP) ExecuteBlockdevDel(ctx context.Context, blockdevID string) error {
 	return q.executeCommand(ctx, "x-blockdev-del", args, nil)
 }
 
+func (q *QMP) ExecuteChardevDel(ctx context.Context, chardevID string) error {
+	args := map[string]interface{}{}
+
+	if q.version.Major > 2 || (q.version.Major == 2 && q.version.Minor >= 9) {
+		args["node-name"] = chardevID
+		return q.executeCommand(ctx, "chardev-del", args, nil)
+	}
+
+	if q.version.Major == 2 && q.version.Minor == 8 {
+		args["node-name"] = chardevID
+	} else {
+		args["id"] = chardevID
+	}
+
+	return q.executeCommand(ctx, "x-chardev-del", args, nil)
+}
+
 // ExecuteNetdevAdd adds a Net device to a QEMU instance
 // using the netdev_add command. netdevID is the id of the device to add.
 // Must be valid QMP identifier.
@@ -1119,6 +1136,24 @@ func (q *QMP) ExecutePCIDeviceAdd(ctx context.Context, blockdevID, devID, driver
 		if disableModern {
 			args["disable-modern"] = disableModern
 		}
+	}
+
+	return q.executeCommand(ctx, "device_add", args, nil)
+}
+
+// ExecutePCICharDevAdd adds a PCI device with chardev.
+// driver is the device type. devID is an identifier for the PCI device,
+// it will be visible in the VM, chardev is the character device id previously added.
+func (q *QMP) ExecutePCICharDevAdd(ctx context.Context, driver, devID, chardevID, addr, bus string) error {
+	args := map[string]interface{}{
+		"driver":  driver,
+		"id":      devID,
+		"chardev": chardevID,
+		"addr":    addr,
+	}
+
+	if bus != "" {
+		args["bus"] = bus
 	}
 
 	return q.executeCommand(ctx, "device_add", args, nil)

@@ -117,7 +117,7 @@ func (dm *deviceManager) createDevice(devInfo config.DeviceInfo) (dev api.Device
 	}
 	if isVFIO(path) {
 		return drivers.NewVFIODevice(&devInfo), nil
-	} else if isVhostUserDev(devInfo) {
+	} else if isVhostUserBlk(devInfo) {
 		return drivers.NewVhostUserBlkDevice(&devInfo), nil
 	} else if isBlock(devInfo) {
 		if devInfo.DriverOptions == nil {

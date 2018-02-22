@@ -1706,6 +1706,13 @@ func (s *Sandbox) HotplugAddDevice(device api.Device, devType config.DeviceType)
 		}
 		_, err := s.hypervisor.hotplugAddDevice(blockDevice.BlockDrive, blockDev)
 		return err
+	case config.VhostUserBlk:
+		vhostUserBlkDevice, ok := device.(*drivers.VhostUserBlkDevice)
+		if !ok {
+			return fmt.Errorf("device type mismatch, expect device type to be %s", devType)
+		}
+		_, err := s.hypervisor.hotplugAddDevice(vhostUserBlkDevice.VhostUserDeviceAttrs, vhostuserDev)
+		return err
 	case config.DeviceGeneric:
 		// TODO: what?
 		return nil

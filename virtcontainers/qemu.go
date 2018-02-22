@@ -1087,6 +1087,40 @@ func (q *qemu) hotplugAddBlockDevice(drive *config.BlockDrive, op operation, dev
 	return nil
 }
 
+func (q *qemu) hotplugAddVhostUserBlkDevice(vAttr *config.VhostUserDeviceAttrs, op operation, devID string) (err error) {
+	err = q.qmpMonitorCh.qmp.ExecuteCharDevUnixSocketAdd(q.qmpMonitorCh.ctx, vAttr.DevID, vAttr.SocketPath, false, false)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			q.qmpMonitorCh.qmp.ExecuteChardevDel(q.qmpMonitorCh.ctx, vAttr.DevID)
+		}
+	}()
+
+	driver := "vhost-user-blk-pci"
+	addr, bridge, err := q.arch.addDeviceToBridge(vAttr.DevID, types.PCI)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			q.arch.removeDeviceFromBridge(vAttr.DevID)
+		}
+	}()
+
+	// PCI address is in the format bridge-addr/device-addr eg. "03/02"
+	vAttr.PCIAddr = fmt.Sprintf("%02x", bridge.Addr) + "/" + addr
+
+	if err = q.qmpMonitorCh.qmp.ExecutePCICharDevAdd(q.qmpMonitorCh.ctx, driver, devID, vAttr.DevID, addr, bridge.ID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (q *qemu) hotplugBlockDevice(drive *config.BlockDrive, op operation) error {
 	err := q.qmpSetup()
 	if err != nil {
@@ -1109,6 +1143,33 @@ func (q *qemu) hotplugBlockDevice(drive *config.BlockDrive, op operation) error 
 		}
 
 		if err := q.qmpMonitorCh.qmp.ExecuteBlockdevDel(q.qmpMonitorCh.ctx, drive.ID); err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
+func (q *qemu) hotplugVhostUserBlkDevice(vAttr *config.VhostUserDeviceAttrs, op operation) error {
+	err := q.qmpSetup()
+	if err != nil {
+		return err
+	}
+
+	devID := "virtio-" + vAttr.DevID
+
+	if op == addDevice {
+		err = q.hotplugAddVhostUserBlkDevice(vAttr, op, devID)
+	} else {
+		if err := q.arch.removeDeviceFromBridge(vAttr.DevID); err != nil {
+			return err
+		}
+
+		if err := q.qmpMonitorCh.qmp.ExecuteDeviceDel(q.qmpMonitorCh.ctx, devID); err != nil {
+			return err
+		}
+
+		if err := q.qmpMonitorCh.qmp.ExecuteChardevDel(q.qmpMonitorCh.ctx, vAttr.DevID); err != nil {
 			return err
 		}
 	}
@@ -1284,6 +1345,9 @@ func (q *qemu) hotplugDevice(devInfo interface{}, devType deviceType, op operati
 	case netDev:
 		device := devInfo.(Endpoint)
 		return nil, q.hotplugNetDevice(device, op)
+	case vhostuserDev:
+		vAttr := devInfo.(*config.VhostUserDeviceAttrs)
+		return nil, q.hotplugVhostUserBlkDevice(vAttr, op)
 	default:
 		return nil, fmt.Errorf("cannot hotplug device: unsupported device type '%v'", devType)
 	}
