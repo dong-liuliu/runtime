@@ -1100,7 +1100,62 @@ func (k *kataAgent) handleShm(grpcSpec *grpc.Spec, sandbox *Sandbox) {
 	}
 }
 
+func (k *kataAgent) appendBlockDevice(dev ContainerDevice, c *Container) *grpc.Device {
+	device := c.sandbox.devManager.GetDeviceByID(dev.ID)
+
+	d, ok := device.GetDeviceInfo().(*config.BlockDrive)
+	if !ok || d == nil {
+		k.Logger().WithField("device", device).Error("malformed block drive")
+		return nil
+	}
+
+	kataDevice := &grpc.Device{
+		ContainerPath: dev.ContainerPath,
+	}
+
+	switch c.sandbox.config.HypervisorConfig.BlockDeviceDriver {
+	case config.VirtioMmio:
+		kataDevice.Type = kataMmioBlkDevType
+		kataDevice.Id = d.VirtPath
+		kataDevice.VmPath = d.VirtPath
+	case config.VirtioBlockCCW:
+		kataDevice.Type = kataBlkCCWDevType
+		kataDevice.Id = d.DevNo
+	case config.VirtioBlock:
+		kataDevice.Type = kataBlkDevType
+		kataDevice.Id = d.PCIAddr
+	case config.VirtioSCSI:
+		kataDevice.Type = kataSCSIDevType
+		kataDevice.Id = d.SCSIAddr
+	case config.Nvdimm:
+		kataDevice.Type = kataNvdimmDevType
+		kataDevice.VmPath = fmt.Sprintf("/dev/pmem%s", d.NvdimmID)
+	}
+
+	return kataDevice
+}
+
+func (k *kataAgent) appendVhostUserBlkDevice(dev ContainerDevice, c *Container) *grpc.Device {
+	device := c.sandbox.devManager.GetDeviceByID(dev.ID)
+
+	d, ok := device.GetDeviceInfo().(*config.VhostUserDeviceAttrs)
+	if !ok || d == nil {
+		k.Logger().WithField("device", device).Error("malformed vhost-user-blk drive")
+		return nil
+	}
+
+	kataDevice := &grpc.Device{
+		ContainerPath: dev.ContainerPath,
+		Type:          kataBlkDevType,
+		Id:            d.PCIAddr,
+	}
+
+	return kataDevice
+}
+
 func (k *kataAgent) appendDevices(deviceList []*grpc.Device, c *Container) []*grpc.Device {
+	var kataDevice *grpc.Device
+
 	for _, dev := range c.devices {
 		device := c.sandbox.devManager.GetDeviceByID(dev.ID)
 		if device == nil {
@@ -1108,37 +1163,15 @@ func (k *kataAgent) appendDevices(deviceList []*grpc.Device, c *Container) []*gr
 			return nil
 		}
 
-		if device.DeviceType() != config.DeviceBlock {
+		switch device.DeviceType() {
+		case config.DeviceBlock:
+			kataDevice = k.appendBlockDevice(dev, c)
+		case config.VhostUserBlk:
+			kataDevice = k.appendVhostUserBlkDevice(dev, c)
+		}
+
+		if kataDevice == nil {
 			continue
-		}
-
-		d, ok := device.GetDeviceInfo().(*config.BlockDrive)
-		if !ok || d == nil {
-			k.Logger().WithField("device", device).Error("malformed block drive")
-			continue
-		}
-
-		kataDevice := &grpc.Device{
-			ContainerPath: dev.ContainerPath,
-		}
-
-		switch c.sandbox.config.HypervisorConfig.BlockDeviceDriver {
-		case config.VirtioMmio:
-			kataDevice.Type = kataMmioBlkDevType
-			kataDevice.Id = d.VirtPath
-			kataDevice.VmPath = d.VirtPath
-		case config.VirtioBlockCCW:
-			kataDevice.Type = kataBlkCCWDevType
-			kataDevice.Id = d.DevNo
-		case config.VirtioBlock:
-			kataDevice.Type = kataBlkDevType
-			kataDevice.Id = d.PCIAddr
-		case config.VirtioSCSI:
-			kataDevice.Type = kataSCSIDevType
-			kataDevice.Id = d.SCSIAddr
-		case config.Nvdimm:
-			kataDevice.Type = kataNvdimmDevType
-			kataDevice.VmPath = fmt.Sprintf("/dev/pmem%s", d.NvdimmID)
 		}
 
 		deviceList = append(deviceList, kataDevice)
