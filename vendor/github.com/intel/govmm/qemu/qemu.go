@@ -101,6 +101,9 @@ const (
 	//VhostUserBlk represents a block vhostuser device type.
 	VhostUserBlk DeviceDriver = "vhost-user-blk-pci"
 
+	//VhostUserFS represents a virtio-fs vhostuser device type
+	VhostUserFS DeviceDriver = "vhost-user-fs-pci"
+
 	// VfioPCI represent a VFIO device type.
 	VfioPCI DeviceDriver = "vfio-pci"
 
@@ -799,6 +802,7 @@ type VhostUserDevice struct {
 	CharDevID     string
 	TypeDevID     string //variable QEMU parameter based on value of VhostUserType
 	Address       string //used for MAC address in net case
+	Tag           string //virtio-fs volume id for mounting inside guest
 	VhostUserType DeviceDriver
 
 	// ROMFile specifies the ROM file being used for this device.
@@ -822,6 +826,10 @@ func (vhostuserDev VhostUserDevice) Valid() bool {
 			return false
 		}
 	case VhostUserBlk:
+	case VhostUserFS:
+		if vhostuserDev.Tag == "" {
+			return false
+		}
 	default:
 		return false
 	}
@@ -864,6 +872,11 @@ func (vhostuserDev VhostUserDevice) QemuParams(config *Config) []string {
 		devParams = append(devParams, "logical_block_size=4096")
 		devParams = append(devParams, "size=512M")
 		devParams = append(devParams, fmt.Sprintf("chardev=%s", vhostuserDev.CharDevID))
+	case VhostUserFS:
+		driver = VhostUserFS
+		devParams = append(devParams, string(driver))
+		devParams = append(devParams, fmt.Sprintf("chardev=%s", vhostuserDev.CharDevID))
+		devParams = append(devParams, fmt.Sprintf("tag=%s", vhostuserDev.Tag))
 	default:
 		return nil
 	}
