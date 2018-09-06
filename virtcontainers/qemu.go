@@ -1186,6 +1186,7 @@ func (q *qemu) addDevice(devInfo interface{}, devType deviceType) error {
 			vhostDev := config.VhostUserDeviceAttrs{
 				Tag: v.MountTag,
 				Type: config.VhostUserFS,
+				CacheSize: q.config.VirtioFSCacheSize,
 			}
 			vhostDev.SocketPath = sockPath
 			vhostDev.DevID = id
