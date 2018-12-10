@@ -805,6 +805,7 @@ type VhostUserDevice struct {
 	Tag           string //virtio-fs volume id for mounting inside guest
 	CacheSize     uint32 // virtio-fs DAX cache size in GiB
 	Cache         string //virtio-fs cache mode
+	SharedVersions bool  //enable virtio-fs shared version metadata	
 	VhostUserType DeviceDriver
 
 	// ROMFile specifies the ROM file being used for this device.
@@ -880,6 +881,9 @@ func (vhostuserDev VhostUserDevice) QemuParams(config *Config) []string {
 		devParams = append(devParams, fmt.Sprintf("chardev=%s", vhostuserDev.CharDevID))
 		devParams = append(devParams, fmt.Sprintf("tag=%s", vhostuserDev.Tag))
 		devParams = append(devParams, fmt.Sprintf("cache-size=%dG", vhostuserDev.CacheSize))
+		if vhostuserDev.SharedVersions {
+			devParams = append(devParams, "versiontable=/dev/shm/fuse_shared_versions")
+		}
 	default:
 		return nil
 	}
