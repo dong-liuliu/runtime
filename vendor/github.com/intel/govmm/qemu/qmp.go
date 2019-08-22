@@ -722,6 +722,19 @@ func (q *QMP) ExecuteQuit(ctx context.Context) error {
 	return q.executeCommand(ctx, "quit", nil, nil)
 }
 
+// ExecuteFsdevAdd sends chardev-add and device_add to the QEMU instance.
+// chardev figure out ID and fsd socket path; device figure out fs tag.
+func (q *QMP) ExecuteFsdevAdd(ctx context.Context, fsTag, charID string) error {
+	args := map[string]interface{}{
+		"driver":     VhostUserFS,
+		"chardev":    charID,
+		"tag":        fsTag,
+		"queue-size": 1024,
+	}
+
+	return q.executeCommand(ctx, "device_add", args, nil)
+}
+
 // ExecuteBlockdevAdd sends a blockdev-add to the QEMU instance.  device is the
 // path of the device to add, e.g., /dev/rdb0, and blockdevID is an identifier
 // used to name the device.  As this identifier will be passed directly to QMP,

@@ -6,11 +6,14 @@
 package virtcontainers
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +25,7 @@ import (
 	kataclient "github.com/kata-containers/agent/protocols/client"
 	"github.com/kata-containers/agent/protocols/grpc"
 	"github.com/kata-containers/runtime/virtcontainers/device/config"
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
 	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
 	ns "github.com/kata-containers/runtime/virtcontainers/pkg/nsenter"
 	"github.com/kata-containers/runtime/virtcontainers/pkg/types"
@@ -29,6 +33,7 @@ import (
 	"github.com/kata-containers/runtime/virtcontainers/utils"
 	opentracing "github.com/opentracing/opentracing-go"
 
+	simplejson "github.com/bitly/go-simplejson"
 	"github.com/gogo/protobuf/proto"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
@@ -56,16 +61,16 @@ var (
 	vsockSocketScheme     = "vsock"
 	// port numbers below 1024 are called privileged ports. Only a process with
 	// CAP_NET_BIND_SERVICE capability may bind to these port numbers.
-	vSockPort            = 1024
-	kata9pDevType        = "9p"
-	kataBlkDevType       = "blk"
-	kataSCSIDevType      = "scsi"
-	kataVirtioFSDevType   = "virtio-fs"
-	sharedDir9pOptions   = []string{"trans=virtio,version=9p2000.L,cache=mmap", "nodev"}
+	vSockPort                = 1024
+	kata9pDevType            = "9p"
+	kataBlkDevType           = "blk"
+	kataSCSIDevType          = "scsi"
+	kataVirtioFSDevType      = "virtio-fs"
+	sharedDir9pOptions       = []string{"trans=virtio,version=9p2000.L,cache=mmap", "nodev"}
 	sharedDirVirtioFSOptions = []string{"rootmode=040000,user_id=0,group_id=0,dax,tag=" + mountGuest9pTag, "nodev"}
-	shmDir               = "shm"
-	kataEphemeralDevType = "ephemeral"
-	ephemeralPath        = filepath.Join(kataGuestSandboxDir, kataEphemeralDevType)
+	shmDir                   = "shm"
+	kataEphemeralDevType     = "ephemeral"
+	ephemeralPath            = filepath.Join(kataGuestSandboxDir, kataEphemeralDevType)
 )
 
 // KataAgentConfig is a structure storing information needed
@@ -921,6 +926,90 @@ func (k *kataAgent) buildContainerRootfs(sandbox *Sandbox, c *Container, rootPat
 	return nil, nil
 }
 
+func checkAndEnableSpdkVolume(k *kataAgent, sandbox *Sandbox, mountPath Mount) (sockPath string, err error) {
+	var cmd *exec.Cmd
+	var args []string
+	var rpcOutput []byte
+
+	vh := reflect.ValueOf(sandbox.hypervisor)
+	q, ok := vh.Interface().(*qemu)
+	if !ok {
+		err = errors.New("Only Qemu is supported")
+		return
+	}
+
+	sourcePath := mountPath.Source
+
+	// start virtiofsd
+	rpcCmdSpdkPath := filepath.Join(q.config.VirtioFSSpdkDir, "scripts/rpc.py")
+	rpcSockSpdkPath := "/var/tmp/spdk.sock"
+	fsBdevName := filepath.Base(sourcePath)
+	fsCtrlrName := filepath.Base(sourcePath) + "-vhost_fs"
+	sockName := fsCtrlrName
+
+	sockPath, err = utils.BuildSocketPath(q.config.VirtioFSSpdkDir, sockName)
+	if err != nil {
+		k.Logger().WithField("sockPath", sockPath).Error("SPDK RPC failed to create sockpath")
+		return
+	}
+
+	// Check whether requried vhost-fs exists
+	args = append(args, rpcCmdSpdkPath, "get_vhost_controllers")
+	cmd = exec.Command("python3", args...)
+	k.Logger().WithField("Cmdline", cmd.Args).Info("SPDK RPC executes")
+
+	rpcOutput, err = cmd.CombinedOutput()
+	if err != nil {
+		k.Logger().WithField("rpcOutput", string(rpcOutput)).Error("SPDK RPC failed")
+		return
+	}
+
+	ctrlrsInfoJson, err := simplejson.NewJson([]byte(rpcOutput))
+	if err != nil {
+		k.Logger().WithField("ctrlrsInfoJson", ctrlrsInfoJson).Error("SPDK RPC failed to pase json output")
+		return
+
+	}
+
+	ctrlrsInfo, err := ctrlrsInfoJson.Array()
+	if err != nil {
+		k.Logger().WithField("ctrlrsInfo", ctrlrsInfo).Error("SPDK RPC failed to pase json output")
+		return
+	}
+
+	for _, ctrlrInfo := range ctrlrsInfo {
+		if eachCtrlr, ok := ctrlrInfo.(map[string]interface{}); ok {
+			if ctrlrName, ok := eachCtrlr["ctrlr"].(string); ok {
+				if ctrlrName == fsCtrlrName {
+					k.Logger().WithField("Name", fsCtrlrName).Debug("Find existed FS controller")
+					return
+				}
+
+			}
+		}
+	}
+
+	k.Logger().WithField("Name", fsCtrlrName).Debug("Didn't find existed FS controller")
+
+	//Construct Spdk vhost-fs controller by RPC
+	args = append(args[0:0], rpcCmdSpdkPath, "-v", "-s", rpcSockSpdkPath,
+		"construct_vhost_fs_controller", fsCtrlrName, fsBdevName, "--cpumask", "0x1")
+
+	// The SPDK daemon requires remove_vhost_controller to terminate
+	// the vhost-user socket when stop the container.
+	// Therefore we do need to send the remove rpc in StopContainer
+	cmd = exec.Command("python3", args...)
+	k.Logger().WithField("Cmdline", cmd.Args).Info("SPDK RPC executes")
+
+	rpcOutput, err = cmd.CombinedOutput()
+	if err != nil {
+		k.Logger().WithField("rpcOutput", string(rpcOutput)).Error("SPDK RPC failed")
+		return
+	}
+
+	return
+}
+
 func (k *kataAgent) createContainer(sandbox *Sandbox, c *Container) (p *Process, err error) {
 	span, _ := k.trace("createContainer")
 	defer span.Finish()
@@ -974,6 +1063,65 @@ func (k *kataAgent) createContainer(sandbox *Sandbox, c *Container) (p *Process,
 	// with the right source path (The guest one).
 	if err = k.replaceOCIMountSource(ociSpec, newMounts); err != nil {
 		return nil, err
+	}
+
+	k.Logger().WithField("VirtioFSSpdk", sandbox.config.HypervisorConfig.VirtioFSSpdk).Info("Create container")
+	if sandbox.config.HypervisorConfig.VirtioFSSpdk {
+		// Find virtiofs volumes from newMount by filtering host-dir name
+		for _, filterMount := range c.mounts {
+
+			path := filterMount.Source
+			if strings.Contains(path, "virtiofsd") == false {
+				continue
+			}
+
+			k.Logger().WithField("Source", filterMount.Source).WithField("Dest", filterMount.Destination).Info("Spdk data volume")
+
+			sockPath, err := checkAndEnableSpdkVolume(k, sandbox, filterMount)
+
+			// Generate a randID to identify this volume in following parameters
+			randID, err := utils.GenerateRandomBytes(4)
+			if err != nil {
+				return nil, err
+			}
+
+			// Assign the virtiofs tag for each virtiofs volume
+			charDevID := "virtiofsChar" + hex.EncodeToString(randID)
+			fsDevTag := "virtiofsTag" + hex.EncodeToString(randID)
+
+			// Add these virtiofs info into req's storage section "ctrStorages"
+			var guestMount Mount
+			for _, guestMount = range newMounts {
+				if guestMount.Destination == filterMount.Destination {
+					break
+				}
+			}
+
+			sharedDirVirtioFSSpdkOptions := []string{"rootmode=040000,user_id=0,group_id=0,dax,tag=" + fsDevTag, "nodev"}
+			sharedVolume := &grpc.Storage{
+				Driver:     kataVirtioFSDevType,
+				Source:     "SPDKvolume",
+				MountPoint: guestMount.Source,
+				Fstype:     typeVirtioFS,
+				Options:    sharedDirVirtioFSSpdkOptions,
+			}
+
+			ctrStorages = append(ctrStorages, sharedVolume)
+
+			// hotplug virtiofs device to hypervisor
+			fsDevice := drivers.VhostUserFSDevice{
+				VhostUserDeviceAttrs: config.VhostUserDeviceAttrs{
+					DevID:      charDevID,
+					SocketPath: sockPath,
+					Tag:        fsDevTag,
+				},
+			}
+
+			err = sandbox.HotplugAddDevice(&fsDevice, config.VhostUserFS)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Append container devices for block devices passed with --device.

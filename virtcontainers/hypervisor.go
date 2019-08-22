@@ -224,6 +224,12 @@ type HypervisorConfig struct {
 	// VirtioFSSharedVersions enables shared version metadata daemon
 	VirtioFSSharedVersions bool
 
+	// VirtioFSSpdk enables spdk vhost-fs for data volumn
+	VirtioFSSpdk bool
+
+	// VirtioFSSpdkDir is the directory path of SPDK source code
+	VirtioFSSpdkDir string
+
 	// EnableIOThreads enables IO to be processed in a separate thread.
 	// Supported currently for virtio-scsi driver.
 	EnableIOThreads bool

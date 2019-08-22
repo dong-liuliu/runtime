@@ -1754,6 +1754,14 @@ func (s *Sandbox) HotplugAddDevice(device api.Device, devType config.DeviceType)
 	defer span.Finish()
 
 	switch devType {
+	case config.VhostUserFS:
+		fsDevice, ok := device.GetDeviceInfo().(*config.VhostUserDeviceAttrs)
+		if !ok {
+			return fmt.Errorf("device type mismatch, expect device type to be %s", devType)
+		}
+
+		_, err := s.hypervisor.hotplugAddDevice(fsDevice, fsDev)
+		return err
 	case config.DeviceVFIO:
 		vfioDevices, ok := device.GetDeviceInfo().([]*config.VFIODev)
 		if !ok {

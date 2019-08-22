@@ -8,6 +8,7 @@ package virtcontainers
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -552,7 +553,7 @@ func (q *qemu) startSandbox() error {
 	}()
 
 	if q.config.VirtioFS {
-                var cmd *exec.Cmd
+		var cmd *exec.Cmd
 		sockPath, err := utils.BuildSocketPath(runStoragePath, q.id, "vhost-fs.sock")
 		if err != nil {
 			return err
@@ -757,6 +758,40 @@ func (q *qemu) removeDeviceFromBridge(ID string) error {
 	return err
 }
 
+func (q *qemu) hotplugFsDevice(drive *config.VhostUserDeviceAttrs, op operation) error {
+	err := q.qmpSetup()
+	if err != nil {
+		return err
+	}
+
+	if op == addDevice {
+		err := q.qmpMonitorCh.qmp.ExecuteCharDevUnixSocketAdd(q.qmpMonitorCh.ctx, drive.DevID, drive.SocketPath, false, false)
+		if err != nil {
+			return err
+		}
+
+		if err := q.qmpMonitorCh.qmp.ExecuteFsdevAdd(q.qmpMonitorCh.ctx, drive.Tag, drive.DevID); err != nil {
+			return err
+		}
+
+	} else {
+		err = errors.New("not implemented yet")
+
+		return err
+		/*
+			if err := q.qmpMonitorCh.qmp.ExecuteFsdevDel(q.qmpMonitorCh.ctx, devID); err != nil {
+				return err
+			}
+
+			if err := q.qmpMonitorCh.qmp.ExecuteCharDevUnixSocketDel(q.qmpMonitorCh.ctx, drive.ID); err != nil {
+				return err
+			}
+		*/
+	}
+
+	return nil
+}
+
 func (q *qemu) hotplugBlockDevice(drive *config.BlockDrive, op operation) error {
 	err := q.qmpSetup()
 	if err != nil {
@@ -954,6 +989,9 @@ func (q *qemu) hotplugNetDevice(endpoint Endpoint, op operation) error {
 
 func (q *qemu) hotplugDevice(devInfo interface{}, devType deviceType, op operation) (interface{}, error) {
 	switch devType {
+	case fsDev:
+		drive := devInfo.(*config.VhostUserDeviceAttrs)
+		return nil, q.hotplugFsDevice(drive, op)
 	case blockDev:
 		drive := devInfo.(*config.BlockDrive)
 		return nil, q.hotplugBlockDevice(drive, op)
@@ -1195,10 +1233,10 @@ func (q *qemu) addDevice(devInfo interface{}, devType deviceType) error {
 			}
 
 			vhostDev := config.VhostUserDeviceAttrs{
-				Tag: v.MountTag,
-				Type: config.VhostUserFS,
-				CacheSize: q.config.VirtioFSCacheSize,
-				Cache: q.config.VirtioFSCache,
+				Tag:            v.MountTag,
+				Type:           config.VhostUserFS,
+				CacheSize:      q.config.VirtioFSCacheSize,
+				Cache:          q.config.VirtioFSCache,
 				SharedVersions: q.config.VirtioFSSharedVersions,
 			}
 			vhostDev.SocketPath = sockPath

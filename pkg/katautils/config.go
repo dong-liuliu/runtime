@@ -76,38 +76,40 @@ type factory struct {
 }
 
 type hypervisor struct {
-	Path                  string `toml:"path"`
-	Kernel                string `toml:"kernel"`
-	Initrd                string `toml:"initrd"`
-	Image                 string `toml:"image"`
-	Firmware              string `toml:"firmware"`
-	MachineAccelerators   string `toml:"machine_accelerators"`
-	KernelParams          string `toml:"kernel_params"`
-	MachineType           string `toml:"machine_type"`
-	BlockDeviceDriver     string `toml:"block_device_driver"`
-	EntropySource         string `toml:"entropy_source"`
-	NumVCPUs              int32  `toml:"default_vcpus"`
-	DefaultMaxVCPUs       uint32 `toml:"default_maxvcpus"`
-	MemorySize            uint32 `toml:"default_memory"`
-	MemSlots              uint32 `toml:"memory_slots"`
-	DefaultBridges        uint32 `toml:"default_bridges"`
-	Msize9p               uint32 `toml:"msize_9p"`
-	DisableBlockDeviceUse bool   `toml:"disable_block_device_use"`
-	VirtioFS              bool   `toml:"enable_virtio_fs"`
-	VirtioFSDaemon        string `toml:"virtio_fs_daemon"`
-	VirtioFSCacheSize     uint32 `toml:"virtio_fs_cache_size"`
-	VirtioFSCache         string `toml:"virtio_fs_cache"`
-	VirtioFSSharedVersions bool `toml:"virtio_fs_shared_versions"`
-	MemPrealloc           bool   `toml:"enable_mem_prealloc"`
-	HugePages             bool   `toml:"enable_hugepages"`
-	Swap                  bool   `toml:"enable_swap"`
-	Debug                 bool   `toml:"enable_debug"`
-	DisableNestingChecks  bool   `toml:"disable_nesting_checks"`
-	EnableIOThreads       bool   `toml:"enable_iothreads"`
-	UseVSock              bool   `toml:"use_vsock"`
-	HotplugVFIOOnRootBus  bool   `toml:"hotplug_vfio_on_root_bus"`
-	DisableVhostNet       bool   `toml:"disable_vhost_net"`
-	GuestHookPath         string `toml:"guest_hook_path"`
+	Path                   string `toml:"path"`
+	Kernel                 string `toml:"kernel"`
+	Initrd                 string `toml:"initrd"`
+	Image                  string `toml:"image"`
+	Firmware               string `toml:"firmware"`
+	MachineAccelerators    string `toml:"machine_accelerators"`
+	KernelParams           string `toml:"kernel_params"`
+	MachineType            string `toml:"machine_type"`
+	BlockDeviceDriver      string `toml:"block_device_driver"`
+	EntropySource          string `toml:"entropy_source"`
+	NumVCPUs               int32  `toml:"default_vcpus"`
+	DefaultMaxVCPUs        uint32 `toml:"default_maxvcpus"`
+	MemorySize             uint32 `toml:"default_memory"`
+	MemSlots               uint32 `toml:"memory_slots"`
+	DefaultBridges         uint32 `toml:"default_bridges"`
+	Msize9p                uint32 `toml:"msize_9p"`
+	DisableBlockDeviceUse  bool   `toml:"disable_block_device_use"`
+	VirtioFS               bool   `toml:"enable_virtio_fs"`
+	VirtioFSSpdk           bool   `toml:"enable_spdk_virtio_fs"`
+	VirtioFSSpdkDir        string `toml:"SpdkDirPath"`
+	VirtioFSDaemon         string `toml:"virtio_fs_daemon"`
+	VirtioFSCacheSize      uint32 `toml:"virtio_fs_cache_size"`
+	VirtioFSCache          string `toml:"virtio_fs_cache"`
+	VirtioFSSharedVersions bool   `toml:"virtio_fs_shared_versions"`
+	MemPrealloc            bool   `toml:"enable_mem_prealloc"`
+	HugePages              bool   `toml:"enable_hugepages"`
+	Swap                   bool   `toml:"enable_swap"`
+	Debug                  bool   `toml:"enable_debug"`
+	DisableNestingChecks   bool   `toml:"disable_nesting_checks"`
+	EnableIOThreads        bool   `toml:"enable_iothreads"`
+	UseVSock               bool   `toml:"use_vsock"`
+	HotplugVFIOOnRootBus   bool   `toml:"hotplug_vfio_on_root_bus"`
+	DisableVhostNet        bool   `toml:"disable_vhost_net"`
+	GuestHookPath          string `toml:"guest_hook_path"`
 }
 
 type proxy struct {
@@ -403,6 +405,11 @@ func newQemuHypervisorConfig(h hypervisor) (vc.HypervisorConfig, error) {
 			errors.New("cannot enable virtio-fs without daemon path in configuration file")
 	}
 
+	if h.VirtioFSSpdk && h.VirtioFSSpdkDir == "" {
+		return vc.HypervisorConfig{},
+			errors.New("cannot enable SPDK virtio-fs without SPDK path in configuration file")
+	}
+
 	machineAccelerators := h.machineAccelerators()
 	kernelParams := h.kernelParams()
 	machineType := h.machineType()
@@ -423,38 +430,40 @@ func newQemuHypervisorConfig(h hypervisor) (vc.HypervisorConfig, error) {
 	}
 
 	return vc.HypervisorConfig{
-		HypervisorPath:        hypervisor,
-		KernelPath:            kernel,
-		InitrdPath:            initrd,
-		ImagePath:             image,
-		FirmwarePath:          firmware,
-		MachineAccelerators:   machineAccelerators,
-		KernelParams:          vc.DeserializeParams(strings.Fields(kernelParams)),
-		HypervisorMachineType: machineType,
-		NumVCPUs:              h.defaultVCPUs(),
-		DefaultMaxVCPUs:       h.defaultMaxVCPUs(),
-		MemorySize:            h.defaultMemSz(),
-		MemSlots:              h.defaultMemSlots(),
-		EntropySource:         h.GetEntropySource(),
-		DefaultBridges:        h.defaultBridges(),
-		DisableBlockDeviceUse: h.DisableBlockDeviceUse,
-		VirtioFS:              h.VirtioFS,
-		VirtioFSDaemon:        h.VirtioFSDaemon,
-		VirtioFSCacheSize:     h.VirtioFSCacheSize,
-		VirtioFSCache:         h.VirtioFSCache,
+		HypervisorPath:         hypervisor,
+		KernelPath:             kernel,
+		InitrdPath:             initrd,
+		ImagePath:              image,
+		FirmwarePath:           firmware,
+		MachineAccelerators:    machineAccelerators,
+		KernelParams:           vc.DeserializeParams(strings.Fields(kernelParams)),
+		HypervisorMachineType:  machineType,
+		NumVCPUs:               h.defaultVCPUs(),
+		DefaultMaxVCPUs:        h.defaultMaxVCPUs(),
+		MemorySize:             h.defaultMemSz(),
+		MemSlots:               h.defaultMemSlots(),
+		EntropySource:          h.GetEntropySource(),
+		DefaultBridges:         h.defaultBridges(),
+		DisableBlockDeviceUse:  h.DisableBlockDeviceUse,
+		VirtioFS:               h.VirtioFS,
+		VirtioFSDaemon:         h.VirtioFSDaemon,
+		VirtioFSCacheSize:      h.VirtioFSCacheSize,
+		VirtioFSCache:          h.VirtioFSCache,
 		VirtioFSSharedVersions: h.VirtioFSSharedVersions,
-		MemPrealloc:           h.MemPrealloc,
-		HugePages:             h.HugePages,
-		Mlock:                 !h.Swap,
-		Debug:                 h.Debug,
-		DisableNestingChecks:  h.DisableNestingChecks,
-		BlockDeviceDriver:     blockDriver,
-		EnableIOThreads:       h.EnableIOThreads,
-		Msize9p:               h.msize9p(),
-		UseVSock:              useVSock,
-		HotplugVFIOOnRootBus:  h.HotplugVFIOOnRootBus,
-		DisableVhostNet:       h.DisableVhostNet,
-		GuestHookPath:         h.guestHookPath(),
+		VirtioFSSpdk:           h.VirtioFSSpdk,
+		VirtioFSSpdkDir:        h.VirtioFSSpdkDir,
+		MemPrealloc:            h.MemPrealloc,
+		HugePages:              h.HugePages,
+		Mlock:                  !h.Swap,
+		Debug:                  h.Debug,
+		DisableNestingChecks:   h.DisableNestingChecks,
+		BlockDeviceDriver:      blockDriver,
+		EnableIOThreads:        h.EnableIOThreads,
+		Msize9p:                h.msize9p(),
+		UseVSock:               useVSock,
+		HotplugVFIOOnRootBus:   h.HotplugVFIOOnRootBus,
+		DisableVhostNet:        h.DisableVhostNet,
+		GuestHookPath:          h.guestHookPath(),
 	}, nil
 }
 
