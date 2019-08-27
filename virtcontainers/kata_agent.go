@@ -1097,10 +1097,10 @@ func (k *kataAgent) createContainer(sandbox *Sandbox, c *Container) (p *Process,
 				}
 			}
 
-			sharedDirVirtioFSSpdkOptions := []string{"rootmode=040000,user_id=0,group_id=0,dax,tag=" + fsDevTag, "nodev"}
+			sharedDirVirtioFSSpdkOptions := []string{"rootmode=040000,user_id=0,group_id=0"}
 			sharedVolume := &grpc.Storage{
 				Driver:     kataVirtioFSDevType,
-				Source:     "SPDKvolume",
+				Source:     fsDevTag,
 				MountPoint: guestMount.Source,
 				Fstype:     typeVirtioFS,
 				Options:    sharedDirVirtioFSSpdkOptions,
