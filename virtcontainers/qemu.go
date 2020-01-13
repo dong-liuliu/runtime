@@ -531,6 +531,15 @@ func (q *qemu) createSandbox(ctx context.Context, id string, networkNS NetworkNa
 		}
 	}
 
+	// Vhost-user-blk/scsi process which can improve performance, like SPDK,
+	// requires shared-on hugepage to work with Qemu.
+	if q.config.EnableVhostUserStore {
+		if !q.config.HugePages {
+			return errors.New("Vhost-user-blk/scsi is enabled without Hugepage. This configuration will not work")
+		}
+		knobs.MemShared = true
+	}
+
 	rtc := govmmQemu.RTC{
 		Base:     "utc",
 		DriftFix: "slew",
@@ -1499,6 +1508,10 @@ func (q *qemu) hotplugAddMemory(memDev *memoryDevice) (int, error) {
 	} else if q.config.SharedFS == config.VirtioFS || q.config.FileBackedMemRootDir != "" {
 		target = q.qemuConfig.Memory.Path
 		memoryBack = "memory-backend-file"
+	} else if q.config.EnableVhostUserStore {
+		// Vhost-user-blk/scsi process which can improve performance, like SPDK,
+		// requires shared-on hugepage to work with Qemu.
+		return 0, fmt.Errorf("Vhost-user-blk/scsi requires hugepage memory")
 	}
 	if q.qemuConfig.Knobs.MemShared {
 		share = true

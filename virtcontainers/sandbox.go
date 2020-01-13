@@ -567,7 +567,7 @@ func newSandbox(ctx context.Context, sandboxConfig SandboxConfig, factory Factor
 	}()
 
 	if s.supportNewStore() {
-		s.devManager = deviceManager.NewDeviceManager(sandboxConfig.HypervisorConfig.BlockDeviceDriver, nil)
+		s.devManager = deviceManager.NewDeviceManager(sandboxConfig.HypervisorConfig.BlockDeviceDriver, sandboxConfig.HypervisorConfig.EnableVhostUserStore, nil)
 
 		// Ignore the error. Restore can fail for a new sandbox
 		s.Restore()
@@ -587,7 +587,7 @@ func newSandbox(ctx context.Context, sandboxConfig SandboxConfig, factory Factor
 		if err != nil {
 			s.Logger().WithError(err).WithField("sandboxid", s.id).Warning("load sandbox devices failed")
 		}
-		s.devManager = deviceManager.NewDeviceManager(sandboxConfig.HypervisorConfig.BlockDeviceDriver, devices)
+		s.devManager = deviceManager.NewDeviceManager(sandboxConfig.HypervisorConfig.BlockDeviceDriver, sandboxConfig.HypervisorConfig.EnableVhostUserStore, devices)
 
 		// Load sandbox state. The hypervisor.createSandbox call, may need to access statei.
 		state, err := s.store.LoadState()

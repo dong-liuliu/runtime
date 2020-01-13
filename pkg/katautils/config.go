@@ -123,6 +123,8 @@ type hypervisor struct {
 	DisableImageNvdimm      bool     `toml:"disable_image_nvdimm"`
 	HotplugVFIOOnRootBus    bool     `toml:"hotplug_vfio_on_root_bus"`
 	DisableVhostNet         bool     `toml:"disable_vhost_net"`
+	EnableVhostUserStore    bool     `toml:"enable_vhost_user_store"`
+	VhostUserStoreSockDir   string   `toml:"vhost_user_store_socket_dir"`
 	GuestHookPath           string   `toml:"guest_hook_path"`
 }
 
@@ -647,6 +649,7 @@ func newQemuHypervisorConfig(h hypervisor) (vc.HypervisorConfig, error) {
 		DisableImageNvdimm:      h.DisableImageNvdimm,
 		HotplugVFIOOnRootBus:    h.HotplugVFIOOnRootBus,
 		DisableVhostNet:         h.DisableVhostNet,
+		EnableVhostUserStore:    h.EnableVhostUserStore,
 		GuestHookPath:           h.guestHookPath(),
 	}, nil
 }

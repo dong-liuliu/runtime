@@ -375,6 +375,9 @@ type HypervisorConfig struct {
 	// DisableVhostNet is used to indicate if host supports vhost_net
 	DisableVhostNet bool
 
+	// EnableVhostUserStore is used to indicate if host supports vhost-user-blk/scsi
+	EnableVhostUserStore bool
+
 	// GuestHookPath is the path within the VM that will be used for 'drop-in' hooks
 	GuestHookPath string
 

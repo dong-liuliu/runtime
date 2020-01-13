@@ -414,6 +414,15 @@ func addHypervisorConfigOverrides(ocispec specs.Spec, config *vc.SandboxConfig) 
 		config.HypervisorConfig.DisableVhostNet = disableVhostNet
 	}
 
+	if value, ok := ocispec.Annotations[vcAnnotations.EnableVhostUserStore]; ok {
+		enableVhostUserStore, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("Error parsing annotation for enable_vhost_user_store: Please specify boolean value 'true|false'")
+		}
+
+		config.HypervisorConfig.EnableVhostUserStore = enableVhostUserStore
+	}
+
 	if value, ok := ocispec.Annotations[vcAnnotations.GuestHookPath]; ok {
 		if value != "" {
 			config.HypervisorConfig.GuestHookPath = value

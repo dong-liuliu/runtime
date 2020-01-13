@@ -84,6 +84,9 @@ const (
 	// DisableVhostNet is a sandbox annotation to specify if vhost-net is not available on the host.
 	DisableVhostNet = kataAnnotHypervisorPrefix + "disable_vhost_net"
 
+	// EnableVhostUserStore is a sandbox annotation to specify if vhost-user-blk/scsi is abailable on the host
+	EnableVhostUserStore = kataAnnotHypervisorPrefix + "enable_vhost_user_store"
+
 	// GuestHookPath is a sandbox annotation to specify the path within the VM that will be used for 'drop-in' hooks.
 	GuestHookPath = kataAnnotHypervisorPrefix + "guest_hook_path"
 
