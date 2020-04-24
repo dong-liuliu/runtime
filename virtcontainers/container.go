@@ -529,7 +529,7 @@ func (c *Container) mountSharedDirMounts(hostSharedDir, guestSharedDir string) (
 		// Check if mount is a block device file. If it is, the block device will be attached to the host
 		// instead of passing this as a shared mount.
 		if len(m.BlockDeviceID) > 0 {
-			// Attach this block device, all other devices passed in the config have been attached at this point
+			// Attach this block device, all other passed in the config have been attached at this point
 			if err = c.sandbox.devManager.AttachDevice(m.BlockDeviceID, c.sandbox); err != nil {
 				return nil, nil, err
 			}

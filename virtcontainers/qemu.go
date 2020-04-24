@@ -525,9 +525,9 @@ func (q *qemu) createSandbox(ctx context.Context, id string, networkNS NetworkNa
 	// Vhost-user-blk/scsi process which can improve performance, like SPDK,
 	// requires shared-on hugepage to work with Qemu.
 	if q.config.EnableVhostUserStore {
-		if !q.config.HugePages {
-			return errors.New("Vhost-user-blk/scsi is enabled without HugePages. This configuration will not work")
-		}
+	//	if !q.config.HugePages {
+	//		return errors.New("Vhost-user-blk/scsi is enabled without HugePages. This configuration will not work")
+	//	}
 		knobs.MemShared = true
 	}
 
@@ -702,7 +702,7 @@ func (q *qemu) getMemArgs() (bool, string, string, error) {
 		if q.config.EnableVhostUserStore {
 			// Vhost-user-blk/scsi process which can improve performance, like SPDK,
 			// requires shared-on hugepage to work with Qemu.
-			return share, target, "", fmt.Errorf("Vhost-user-blk/scsi requires hugepage memory")
+	//		return share, target, "", fmt.Errorf("Vhost-user-blk/scsi requires hugepage memory")
 		}
 
 		if q.config.SharedFS == config.VirtioFS || q.config.FileBackedMemRootDir != "" {
