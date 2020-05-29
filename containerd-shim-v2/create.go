@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	containerd_types "github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/mount"
@@ -20,6 +21,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+
 	// only register the proto type
 	_ "github.com/containerd/containerd/runtime/linux/runctypes"
 	crioption "github.com/containerd/cri-containerd/pkg/api/runtimeoptions/v1"
@@ -188,7 +190,8 @@ func checkAndMount(s *service, r *taskAPI.CreateTaskRequest) error {
 	if len(r.Rootfs) == 1 {
 		m := r.Rootfs[0]
 
-		if katautils.IsBlockDevice(m.Source) && !s.config.HypervisorConfig.DisableBlockDeviceUse {
+		// TODO: add vhost logics to bypass mounting
+		if (katautils.IsBlockDevice(m.Source) || strings.Contains(m.Source, "/block/devices/")) && !s.config.HypervisorConfig.DisableBlockDeviceUse {
 			s.mount = false
 			return nil
 		}
