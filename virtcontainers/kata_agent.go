@@ -1186,14 +1186,69 @@ func (k *kataAgent) rollbackFailingContainerCreation(c *Container) {
 	}
 }
 
+// handleVhostUserBlkRootfs handles rootfs that is block device file
+// and VhostUserBlk type.
+func (k *kataAgent) handleVhostUserBlkRootfs(c *Container, device api.Device) (*grpc.Storage, error) {
+	rootfs := &grpc.Storage{}
+
+	d, ok := device.GetDeviceInfo().(*config.VhostUserDeviceAttrs)
+	if !ok || d == nil {
+		k.Logger().Error("malformed vhost-user blk drive")
+		return nil, fmt.Errorf("malformed vhost-user blk drive")
+	}
+
+	rootfs.Driver = kataBlkDevType
+	rootfs.Source = d.PCIAddr
+
+	return rootfs, nil
+}
+
+// handleDeviceBlockRootfs handles rootfs that is block device file
+// and block type.
+func (k *kataAgent) handleDeviceBlockRootfs(c *Container, device api.Device) (*grpc.Storage, error) {
+	rootfs := &grpc.Storage{}
+
+	blockDrive, ok := device.GetDeviceInfo().(*config.BlockDrive)
+	if !ok || blockDrive == nil {
+		k.Logger().Error("malformed block drive")
+		return nil, fmt.Errorf("malformed block drive")
+	}
+	switch {
+	case c.sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioMmio:
+		rootfs.Driver = kataMmioBlkDevType
+		rootfs.Source = blockDrive.VirtPath
+	case c.sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioBlockCCW:
+		rootfs.Driver = kataBlkCCWDevType
+		rootfs.Source = blockDrive.DevNo
+	case c.sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioBlock:
+		rootfs.Driver = kataBlkDevType
+		if blockDrive.PCIAddr == "" {
+			rootfs.Source = blockDrive.VirtPath
+		} else {
+			rootfs.Source = blockDrive.PCIAddr
+		}
+
+	case c.sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioSCSI:
+
+		rootfs.Driver = kataSCSIDevType
+		rootfs.Source = blockDrive.SCSIAddr
+	default:
+		return nil, fmt.Errorf("Unknown block device driver: %s", c.sandbox.config.HypervisorConfig.BlockDeviceDriver)
+	}
+
+	return rootfs, nil
+}
+
 func (k *kataAgent) buildContainerRootfs(sandbox *Sandbox, c *Container, rootPathParent string) (*grpc.Storage, error) {
+	//return nil, fmt.Errorf("fstype is %s, blockID is %s\n", c.state.Fstype, c.state.BlockDeviceID)
 	if c.state.Fstype != "" && c.state.BlockDeviceID != "" {
 		// The rootfs storage volume represents the container rootfs
 		// mount point inside the guest.
 		// It can be a block based device (when using block based container
 		// overlay on the host) mount or a 9pfs one (for all other overlay
 		// implementations).
-		rootfs := &grpc.Storage{}
+
+		var rootfs *grpc.Storage
 
 		// This is a block based device rootfs.
 		device := sandbox.devManager.GetDeviceByID(c.state.BlockDeviceID)
@@ -1202,32 +1257,19 @@ func (k *kataAgent) buildContainerRootfs(sandbox *Sandbox, c *Container, rootPat
 			return nil, fmt.Errorf("failed to find device by id %q", c.state.BlockDeviceID)
 		}
 
-		blockDrive, ok := device.GetDeviceInfo().(*config.BlockDrive)
-		if !ok || blockDrive == nil {
-			k.Logger().Error("malformed block drive")
-			return nil, fmt.Errorf("malformed block drive")
-		}
-		switch {
-		case sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioMmio:
-			rootfs.Driver = kataMmioBlkDevType
-			rootfs.Source = blockDrive.VirtPath
-		case sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioBlockCCW:
-			rootfs.Driver = kataBlkCCWDevType
-			rootfs.Source = blockDrive.DevNo
-		case sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioBlock:
-			rootfs.Driver = kataBlkDevType
-			if blockDrive.PCIAddr == "" {
-				rootfs.Source = blockDrive.VirtPath
-			} else {
-				rootfs.Source = blockDrive.PCIAddr
-			}
-
-		case sandbox.config.HypervisorConfig.BlockDeviceDriver == config.VirtioSCSI:
-
-			rootfs.Driver = kataSCSIDevType
-			rootfs.Source = blockDrive.SCSIAddr
+		var err error
+		switch device.DeviceType() {
+		case config.DeviceBlock:
+			rootfs, err = k.handleDeviceBlockRootfs(c, device)
+		case config.VhostUserBlk:
+			rootfs, err = k.handleVhostUserBlkRootfs(c, device)
 		default:
-			return nil, fmt.Errorf("Unknown block device driver: %s", sandbox.config.HypervisorConfig.BlockDeviceDriver)
+			k.Logger().Error("Unknown block device type to build containe rootfs")
+			err = fmt.Errorf("Unknown block device type to build containe rootfs")
+		}
+
+		if rootfs == nil || err != nil {
+			return nil, err
 		}
 
 		rootfs.MountPoint = rootPathParent

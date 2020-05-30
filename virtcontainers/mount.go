@@ -48,6 +48,16 @@ func isSystemMount(m string) bool {
 	return false
 }
 
+func isVhostBlockDevice(m string) bool {
+
+	// TODO: use configuration's value
+	if strings.Contains(m, "/block/devices") {
+		return true
+	}
+
+	return false
+}
+
 func isHostDevice(m string) bool {
 	if m == "/dev" {
 		return true
@@ -124,7 +134,7 @@ func getDeviceForPath(path string) (device, error) {
 		return device{}, err
 	}
 
-	if isHostDevice(path) {
+	if isHostDevice(path) || isVhostBlockDevice(path) {
 		// stat.Rdev describes the device that this file (inode) represents.
 		devMajor = major(stat.Rdev)
 		devMinor = minor(stat.Rdev)
@@ -246,6 +256,11 @@ var checkStorageDriver = isDeviceMapper
 
 // isDeviceMapper checks if the device with the major and minor numbers is a devicemapper block device
 func isDeviceMapper(major, minor int) (bool, error) {
+	// TODO: treat vhostblk as devicemapper
+	VhostUserBlkMajor := 241
+	if major == VhostUserBlkMajor {
+		return true, nil
+	}
 
 	//Check if /sys/dev/block/${major}-${minor}/dm exists
 	sysPath := fmt.Sprintf(blockFormatTemplate, major, minor)

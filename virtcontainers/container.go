@@ -1346,13 +1346,16 @@ func (c *Container) hotplugDrive() error {
 	return c.setStateFstype(fsType)
 }
 
+var vhostUserBlkMajor uint32 = 241
+
 func (c *Container) plugDevice(devicePath string) error {
 	var stat unix.Stat_t
 	if err := unix.Stat(devicePath, &stat); err != nil {
 		return fmt.Errorf("stat %q failed: %v", devicePath, err)
 	}
 
-	if c.checkBlockDeviceSupport() && stat.Mode&unix.S_IFBLK == unix.S_IFBLK {
+	// TODO: vhost-blk check
+	if c.checkBlockDeviceSupport() && (stat.Mode&unix.S_IFBLK == unix.S_IFBLK || unix.Major(stat.Rdev) == vhostUserBlkMajor) {
 		b, err := c.sandbox.devManager.NewDevice(config.DeviceInfo{
 			HostPath:      devicePath,
 			ContainerPath: filepath.Join(kataGuestSharedDir(), c.id),
